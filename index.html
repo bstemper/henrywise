@@ -15,6 +15,13 @@
     <p>UK Tax Calculator — Estimate your take-home pay under PAYE</p>
   </header>
 
+  <div class="tab-bar">
+    <button class="tab active" data-tab="calculator" onclick="switchTab('calculator')">Take-Home Calculator</button>
+    <button class="tab" data-tab="pension" onclick="switchTab('pension')">Pension Tapering</button>
+  </div>
+
+  <div id="tab-calculator">
+
   <div class="toolbar">
     <div class="select-wrap">
       <label>Tax year</label>
@@ -43,6 +50,19 @@
     2026–27 rates are projected based on current government policy — verify before relying on them.
     Results are estimates only and do not constitute financial advice.
   </p>
+
+  </div><!-- /tab-calculator -->
+
+  <div id="tab-pension" style="display:none">
+    <div class="table-scroll">
+      <div class="calc-grid" id="pensionGrid"></div>
+    </div>
+    <p class="disclaimer" style="margin-top:24px">
+      Annual allowance tapers by £1 for every £2 of adjusted income above the trigger threshold,
+      down to the minimum. Carry forward uses unused allowance from the 3 preceding years.
+      Results are estimates only and do not constitute financial advice.
+    </p>
+  </div>
 
 </div>
 

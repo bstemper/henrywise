@@ -70,6 +70,33 @@ body {
   color: var(--gray-500);
 }
 
+/* ── Tab bar ──────────────────────────────────────────── */
+
+.tab-bar {
+  display: flex;
+  gap: 0;
+  border-bottom: 1px solid var(--gray-200);
+  margin-bottom: 24px;
+}
+
+.tab {
+  padding: 10px 20px;
+  font-family: inherit;
+  font-size: 0.875rem;
+  font-weight: 500;
+  color: var(--gray-500);
+  background: none;
+  border: none;
+  border-bottom: 2px solid transparent;
+  cursor: pointer;
+  transition: color 0.15s, border-color 0.15s;
+}
+.tab:hover { color: var(--gray-700); }
+.tab.active {
+  color: var(--blue-600);
+  border-bottom-color: var(--blue-600);
+}
+
 /* ── Toolbar ──────────────────────────────────────────── */
 
 .toolbar {

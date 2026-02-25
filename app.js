@@ -27,6 +27,16 @@ const YEARS = {
   },
 };
 
+// ── Pension tapering data ────────────────────────────────────────────────────
+
+const PENSION_YEARS = {
+  '2223': { label: '2022–23', aa: 40000, threshold: 200000, adjustedTrigger: 240000, minAA: 4000 },
+  '2324': { label: '2023–24', aa: 60000, threshold: 200000, adjustedTrigger: 260000, minAA: 10000 },
+  '2425': { label: '2024–25', aa: 60000, threshold: 200000, adjustedTrigger: 260000, minAA: 10000 },
+  '2526': { label: '2025–26', aa: 60000, threshold: 200000, adjustedTrigger: 260000, minAA: 10000 },
+};
+const PENSION_YEAR_KEYS = Object.keys(PENSION_YEARS);
+
 // ── State ────────────────────────────────────────────────────────────────────
 
 const MAX_COLS = 5;
@@ -35,6 +45,8 @@ const S = {
   taxOpen: false,
   niOpen: false,
   results: null,
+  activeTab: 'calculator',
+  pension: Object.fromEntries(PENSION_YEAR_KEYS.map(k => [k, { grossIncome: '', employerContrib: '', personalContrib: '', pensionUsed: '' }])),
 };
 
 // ── Tax code validation ──────────────────────────────────────────────────────
@@ -390,6 +402,158 @@ function removeCol(i) {
 function toggleS(key) {
   S[key] = !S[key];
   render();
+}
+
+// ── Tab switching ────────────────────────────────────────────────────────────
+
+function switchTab(tab) {
+  S.activeTab = tab;
+  document.getElementById('tab-calculator').style.display = tab === 'calculator' ? '' : 'none';
+  document.getElementById('tab-pension').style.display = tab === 'pension' ? '' : 'none';
+  document.querySelectorAll('.tab').forEach(el => {
+    el.classList.toggle('active', el.dataset.tab === tab);
+  });
+  if (tab === 'pension') renderPension();
+}
+
+// ── Pension calculation ─────────────────────────────────────────────────────
+
+function calcPension() {
+  const results = {};
+  for (const key of PENSION_YEAR_KEYS) {
+    const p = S.pension[key];
+    const yr = PENSION_YEARS[key];
+    const gross = parseFloat(p.grossIncome) || 0;
+    const employer = parseFloat(p.employerContrib) || 0;
+    const personal = parseFloat(p.personalContrib) || 0;
+    const used = parseFloat(p.pensionUsed) || 0;
+
+    const thresholdIncome = gross - personal;
+    const adjustedIncome = gross + employer;
+
+    let taperedAA = yr.aa;
+    if (thresholdIncome > yr.threshold && adjustedIncome > yr.adjustedTrigger) {
+      taperedAA = Math.max(yr.minAA, yr.aa - Math.floor((adjustedIncome - yr.adjustedTrigger) / 2));
+    }
+
+    const unused = Math.max(0, taperedAA - used);
+    results[key] = { thresholdIncome, adjustedIncome, taperedAA, unused };
+  }
+
+  // Carry forward for current year (last key)
+  const currentKey = PENSION_YEAR_KEYS[PENSION_YEAR_KEYS.length - 1];
+  const priorKeys = PENSION_YEAR_KEYS.slice(0, -1);
+  const carryForward = priorKeys.reduce((sum, k) => sum + results[k].unused, 0);
+  const totalAvailable = results[currentKey].taperedAA + carryForward;
+  results._carryForward = carryForward;
+  results._totalAvailable = totalAvailable;
+
+  return results;
+}
+
+// ── Pension rendering ───────────────────────────────────────────────────────
+
+function updatePensionField(yearKey, field, value) {
+  S.pension[yearKey][field] = value;
+  renderPension();
+}
+
+function renderPension() {
+  const n = PENSION_YEAR_KEYS.length;
+  const res = calcPension();
+  const grid = document.getElementById('pensionGrid');
+  grid.style.gridTemplateColumns = `var(--label-w) repeat(${n}, var(--col-w))`;
+
+  const C = (cls, content) => `<div class="cell ${cls}">${content}</div>`;
+  const lastColClass = (i) => i === n - 1 ? 'no-border-right' : '';
+  const currentIdx = n - 1;
+
+  let h = '';
+
+  // Column headers
+  h += C('cell-colhead label-col', '');
+  for (let i = 0; i < n; i++) {
+    const key = PENSION_YEAR_KEYS[i];
+    h += `<div class="cell cell-colhead value-col ${lastColClass(i)}">
+      <span class="col-num">${PENSION_YEARS[key].label}</span>
+    </div>`;
+  }
+
+  // Input rows
+  const inputRows = [
+    { label: 'Gross Income', field: 'grossIncome', placeholder: 'e.g. 300000' },
+    { label: 'Employer Contributions', field: 'employerContrib', placeholder: 'e.g. 30000' },
+    { label: 'Personal Contributions', field: 'personalContrib', placeholder: 'e.g. 10000' },
+  ];
+
+  for (const row of inputRows) {
+    h += C('cell cell-input label-col', row.label);
+    for (let i = 0; i < n; i++) {
+      const key = PENSION_YEAR_KEYS[i];
+      h += `<div class="cell cell-input value-col ${lastColClass(i)}">
+        <div class="field">
+          <span class="field-pfx">£</span>
+          <input type="number" min="0" step="1000" placeholder="${row.placeholder}"
+            value="${esc(S.pension[key][row.field])}"
+            oninput="updatePensionField('${key}','${row.field}',this.value)">
+        </div>
+      </div>`;
+    }
+  }
+
+  // Computed rows
+  h += C('cell label-col', 'Threshold Income');
+  for (let i = 0; i < n; i++) {
+    const key = PENSION_YEAR_KEYS[i];
+    h += C(`cell value-col ${lastColClass(i)}`, fmt(res[key].thresholdIncome));
+  }
+
+  h += C('cell label-col', 'Adjusted Income');
+  for (let i = 0; i < n; i++) {
+    const key = PENSION_YEAR_KEYS[i];
+    h += C(`cell value-col ${lastColClass(i)}`, fmt(res[key].adjustedIncome));
+  }
+
+  h += C('cell label-col', 'Annual Allowance');
+  for (let i = 0; i < n; i++) {
+    const key = PENSION_YEAR_KEYS[i];
+    h += C(`cell value-col ${lastColClass(i)}`, fmt(res[key].taperedAA));
+  }
+
+  // Pension used input
+  h += C('cell cell-input label-col', 'Pension Used');
+  for (let i = 0; i < n; i++) {
+    const key = PENSION_YEAR_KEYS[i];
+    h += `<div class="cell cell-input value-col ${lastColClass(i)}">
+      <div class="field">
+        <span class="field-pfx">£</span>
+        <input type="number" min="0" step="1000" placeholder="e.g. 20000"
+          value="${esc(S.pension[key].pensionUsed)}"
+          oninput="updatePensionField('${key}','pensionUsed',this.value)">
+      </div>
+    </div>`;
+  }
+
+  // Unused allowance
+  h += C('cell label-col', 'Unused Allowance');
+  for (let i = 0; i < n; i++) {
+    const key = PENSION_YEAR_KEYS[i];
+    h += C(`cell value-col ${lastColClass(i)}`, fmt(res[key].unused));
+  }
+
+  // Carry forward (only current year)
+  h += C('cell cell-total label-col', 'Carry Forward Available');
+  for (let i = 0; i < n; i++) {
+    h += C(`cell cell-total value-col ${lastColClass(i)}`, i === currentIdx ? fmt(res._carryForward) : '—');
+  }
+
+  // Total available (only current year)
+  h += C('cell cell-takehome label-col no-border-bottom', 'Total Available');
+  for (let i = 0; i < n; i++) {
+    h += C(`cell cell-takehome value-col ${lastColClass(i)} no-border-bottom`, i === currentIdx ? fmt(res._totalAvailable) : '—');
+  }
+
+  grid.innerHTML = h;
 }
 
 // ── Init ─────────────────────────────────────────────────────────────────────
