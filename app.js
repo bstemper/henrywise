@@ -31,7 +31,7 @@ const YEARS = {
 
 const MAX_COLS = 5;
 const S = {
-  cols: [{ salary: '', taxCode: '1257L' }],
+  cols: [{ salary: '', taxCode: '1257L', bonus: '', bonusFreq: '' }],
   taxOpen: false,
   niOpen: false,
   results: null,
@@ -175,6 +175,40 @@ function render() {
     </div>`;
   }
 
+  // Bonus amount row
+  h += C('cell cell-input label-col', 'Bonus');
+  for (let i = 0; i < n; i++) {
+    h += `<div class="cell cell-input value-col ${lastColClass(i)}">
+      <div class="field">
+        <span class="field-pfx">£</span>
+        <input type="number" min="0" step="500" placeholder="e.g. 5000"
+          value="${esc(S.cols[i].bonus)}"
+          data-col-input="${i}" data-field="bonus"
+          oninput="updateCol(${i},'bonus',this.value)">
+      </div>
+    </div>`;
+  }
+
+  // Bonus frequency row (only if any column has a bonus)
+  const anyBonus = S.cols.some(c => parseFloat(c.bonus) > 0);
+  if (anyBonus) {
+    h += C('cell cell-input label-col', 'Bonus Frequency');
+    for (let i = 0; i < n; i++) {
+      const freq = S.cols[i].bonusFreq || '';
+      h += `<div class="cell cell-input value-col ${lastColClass(i)}">
+        <div class="field">
+          <select data-col-input="${i}" data-field="bonusFreq"
+            onchange="updateCol(${i},'bonusFreq',this.value)">
+            <option value=""${freq === '' ? ' selected' : ''}>None</option>
+            <option value="1"${freq === '1' ? ' selected' : ''}>Annually</option>
+            <option value="2"${freq === '2' ? ' selected' : ''}>Semi-annually</option>
+            <option value="4"${freq === '4' ? ' selected' : ''}>Quarterly</option>
+          </select>
+        </div>
+      </div>`;
+    }
+  }
+
   // Total Income Tax (with toggle chevron)
   h += `<div class="cell cell-total label-col" onclick="toggleS('taxOpen')" style="cursor:pointer;user-select:none;gap:8px">
     ${chev(S.taxOpen)} Total Income Tax
@@ -219,10 +253,24 @@ function render() {
     h += C(`cell cell-takehome value-col ${lastColClass(i)}`, res ? fmt(res[i]?.takeHome) : dash);
   }
 
-  // Take-home monthly (last row)
-  h += C('cell cell-monthly label-col no-border-bottom', '↳ per month');
+  // Take-home per month (salary only)
+  const anyBonusResult = res && res.some(r => r && r.bonusFreq > 0);
+  h += C(`cell cell-monthly label-col ${anyBonusResult ? '' : 'no-border-bottom'}`, '↳ per month');
   for (let i = 0; i < n; i++) {
-    h += C(`cell cell-monthly value-col ${lastColClass(i)} no-border-bottom`, res ? fmt(res[i] ? res[i].takeHome / 12 : null) : dash);
+    h += C(`cell cell-monthly value-col ${lastColClass(i)} ${anyBonusResult ? '' : 'no-border-bottom'}`,
+      res ? fmt(res[i] ? res[i].salaryTakeHome / 12 : null) : dash);
+  }
+
+  // Bonus month row (only if any result has bonus)
+  if (anyBonusResult) {
+    h += C('cell cell-monthly label-col no-border-bottom', '↳ bonus month');
+    for (let i = 0; i < n; i++) {
+      const r = res ? res[i] : null;
+      const val = r && r.bonusFreq > 0
+        ? (r.salaryTakeHome / 12) + (r.bonusNet / r.bonusFreq)
+        : (r ? r.salaryTakeHome / 12 : null);
+      h += C(`cell cell-monthly value-col ${lastColClass(i)} no-border-bottom`, res ? fmt(val) : dash);
+    }
   }
 
   grid.innerHTML = h;
@@ -270,7 +318,15 @@ function calculate() {
   const yearKey = document.getElementById('taxYear').value;
   S.results = S.cols.map(c => {
     const sal = parseFloat(c.salary);
-    return isNaN(sal) || sal <= 0 ? null : calcOne(sal, c.taxCode, yearKey);
+    if (isNaN(sal) || sal <= 0) return null;
+    const bonus = parseFloat(c.bonus) || 0;
+    const freqNum = parseInt(c.bonusFreq) || 0;
+    const totalAnnualBonus = bonus > 0 && freqNum > 0 ? bonus * freqNum : 0;
+    const base = calcOne(sal, c.taxCode, yearKey);
+    if (totalAnnualBonus <= 0) return { ...base, salaryTakeHome: base.takeHome, bonusNet: 0, bonusFreq: 0 };
+    const combined = calcOne(sal + totalAnnualBonus, c.taxCode, yearKey);
+    const bonusNet = combined.takeHome - base.takeHome;
+    return { ...combined, salaryTakeHome: base.takeHome, bonusNet, bonusFreq: freqNum };
   });
 
   const anyValid = S.results.some(r => r !== null);
@@ -290,6 +346,10 @@ function updateCol(i, field, val) {
   if (S.results) {
     S.results = null;
     setNote('Details changed — press Calculate to update.', 'var(--gray-400)');
+  }
+  if (field === 'bonus') {
+    render();
+    return;
   }
   if (field === 'taxCode') {
     const input = document.querySelector(`[data-col-input="${i}"][data-field="taxCode"]`);
@@ -315,7 +375,7 @@ function updateCol(i, field, val) {
 
 function addCol() {
   if (S.cols.length >= MAX_COLS) return;
-  S.cols.push({ salary: '', taxCode: '1257L' });
+  S.cols.push({ salary: '', taxCode: '1257L', bonus: '', bonusFreq: '' });
   S.results = null;
   render();
 }
