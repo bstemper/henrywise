@@ -57,9 +57,18 @@
     <div class="table-scroll">
       <div class="calc-grid" id="pensionGrid"></div>
     </div>
-    <p class="disclaimer" style="margin-top:24px">
+
+    <div class="calc-action">
+      <button class="btn btn-primary" id="pensionCalcBtn" onclick="calculatePension()">
+        <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12h14M12 5l7 7-7 7"/></svg>
+        Calculate
+      </button>
+      <span class="calc-note" id="pensionCalcNote">Enter your details above, then press Calculate.</span>
+    </div>
+
+    <p class="disclaimer">
       Annual allowance tapers by £1 for every £2 of adjusted income above the trigger threshold,
-      down to the minimum. Carry forward uses unused allowance from the 3 preceding years.
+      down to the minimum. Carry forward uses unused allowance from the 3 preceding years (oldest first).
       Results are estimates only and do not constitute financial advice.
     </p>
   </div>

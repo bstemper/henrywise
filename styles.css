@@ -396,6 +396,23 @@ body {
   max-width: 800px;
 }
 
+/* ── Pension grid ─────────────────────────────────────── */
+
+.pension-year-cell {
+  font-weight: 500;
+  color: var(--gray-700);
+  white-space: nowrap;
+}
+
+#pensionGrid .cell-colhead .col-num {
+  white-space: normal;
+  text-align: center;
+  line-height: 1.4;
+}
+
+#pensionGrid .cell { min-width: 130px; }
+#pensionGrid .cell-input { min-width: 160px; }
+
 /* ── Animations ───────────────────────────────────────── */
 
 @keyframes fadeSlide {

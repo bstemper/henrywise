@@ -46,7 +46,8 @@ const S = {
   niOpen: false,
   results: null,
   activeTab: 'calculator',
-  pension: Object.fromEntries(PENSION_YEAR_KEYS.map(k => [k, { grossIncome: '', employerContrib: '', personalContrib: '', pensionUsed: '' }])),
+  pension: Object.fromEntries(PENSION_YEAR_KEYS.map(k => [k, { taxableIncome: '', employeeContrib: '', employerContrib: '' }])),
+  pensionResults: null,
 };
 
 // ── Tax code validation ──────────────────────────────────────────────────────
@@ -420,33 +421,62 @@ function switchTab(tab) {
 
 function calcPension() {
   const results = {};
+  // Track remaining unused AA per year (consumed oldest-first by later years)
+  const unusedRemaining = {};
+
   for (const key of PENSION_YEAR_KEYS) {
     const p = S.pension[key];
     const yr = PENSION_YEARS[key];
-    const gross = parseFloat(p.grossIncome) || 0;
+    const taxableIncome = parseFloat(p.taxableIncome) || 0;
+    const employee = parseFloat(p.employeeContrib) || 0;
     const employer = parseFloat(p.employerContrib) || 0;
-    const personal = parseFloat(p.personalContrib) || 0;
-    const used = parseFloat(p.pensionUsed) || 0;
 
-    const thresholdIncome = gross - personal;
-    const adjustedIncome = gross + employer;
+    const totalContrib = employee + employer;
+    const thresholdIncome = taxableIncome - employee;
+    const adjustedIncome = taxableIncome + employer;
 
     let taperedAA = yr.aa;
     if (thresholdIncome > yr.threshold && adjustedIncome > yr.adjustedTrigger) {
       taperedAA = Math.max(yr.minAA, yr.aa - Math.floor((adjustedIncome - yr.adjustedTrigger) / 2));
     }
 
-    const unused = Math.max(0, taperedAA - used);
-    results[key] = { thresholdIncome, adjustedIncome, taperedAA, unused };
-  }
+    // Gather carry forward from up to 3 prior years
+    const keyIdx = PENSION_YEAR_KEYS.indexOf(key);
+    const priorKeys = PENSION_YEAR_KEYS.slice(Math.max(0, keyIdx - 3), keyIdx);
+    const cfAvailable = priorKeys.reduce((sum, k) => sum + (unusedRemaining[k] || 0), 0);
 
-  // Carry forward for current year (last key)
-  const currentKey = PENSION_YEAR_KEYS[PENSION_YEAR_KEYS.length - 1];
-  const priorKeys = PENSION_YEAR_KEYS.slice(0, -1);
-  const carryForward = priorKeys.reduce((sum, k) => sum + results[k].unused, 0);
-  const totalAvailable = results[currentKey].taperedAA + carryForward;
-  results._carryForward = carryForward;
-  results._totalAvailable = totalAvailable;
+    let cfUsed = 0;
+    let excess = 0;
+
+    if (totalContrib > taperedAA) {
+      const needed = totalContrib - taperedAA;
+      cfUsed = Math.min(cfAvailable, needed);
+      excess = needed - cfUsed;
+      // Consume from oldest year first
+      let remaining = cfUsed;
+      for (const pk of priorKeys) {
+        if (remaining <= 0) break;
+        const use = Math.min(unusedRemaining[pk] || 0, remaining);
+        unusedRemaining[pk] -= use;
+        remaining -= use;
+      }
+    }
+
+    const unusedThisYear = Math.max(0, taperedAA - totalContrib);
+    unusedRemaining[key] = unusedThisYear;
+
+    // Total carry forward pool available for the next year (up to 3 years back from next)
+    const nextPriorKeys = PENSION_YEAR_KEYS.slice(Math.max(0, keyIdx - 2), keyIdx + 1);
+    const cfToNext = nextPriorKeys.reduce((sum, k) => sum + (unusedRemaining[k] || 0), 0);
+
+    const relievedContrib = totalContrib - excess;
+
+    results[key] = {
+      totalContrib, thresholdIncome, adjustedIncome, taperedAA,
+      cfAvailable, cfUsed, cfToNext,
+      relievedContrib, excess,
+    };
+  }
 
   return results;
 }
@@ -455,102 +485,110 @@ function calcPension() {
 
 function updatePensionField(yearKey, field, value) {
   S.pension[yearKey][field] = value;
+  if (S.pensionResults) {
+    S.pensionResults = null;
+    setPensionNote('Details changed — press Calculate to update.', 'var(--gray-400)');
+    renderPension();
+  }
+}
+
+function setPensionNote(msg, color) {
+  const note = document.getElementById('pensionCalcNote');
+  note.textContent = msg;
+  note.style.color = color;
+}
+
+function calculatePension() {
+  // Sync inputs from DOM
+  document.querySelectorAll('[data-pension-input]').forEach(el => {
+    const key = el.dataset.pensionYear;
+    const field = el.dataset.pensionField;
+    if (S.pension[key]) S.pension[key][field] = el.value;
+  });
+
+  S.pensionResults = calcPension();
+
+  const anyInput = PENSION_YEAR_KEYS.some(k => {
+    const p = S.pension[k];
+    return parseFloat(p.taxableIncome) > 0 || parseFloat(p.employeeContrib) > 0 || parseFloat(p.employerContrib) > 0;
+  });
+
+  if (anyInput) {
+    setPensionNote('Results updated.', 'var(--green-600)');
+    document.getElementById('pensionGrid').classList.add('results-appear');
+    setTimeout(() => document.getElementById('pensionGrid').classList.remove('results-appear'), 300);
+  } else {
+    setPensionNote('Please enter income or contributions for at least one year.', 'var(--gray-400)');
+  }
+
   renderPension();
 }
 
-function renderPension() {
-  const n = PENSION_YEAR_KEYS.length;
-  const res = calcPension();
-  const grid = document.getElementById('pensionGrid');
-  grid.style.gridTemplateColumns = `var(--label-w) repeat(${n}, var(--col-w))`;
+const PENSION_COLS = [
+  { key: 'taxYear',         label: 'Tax Year' },
+  { key: 'taxableIncome',   label: 'Taxable Income',                input: true, field: 'taxableIncome', placeholder: 'e.g. 300000' },
+  { key: 'employeeContrib', label: 'Employee Contributions',        input: true, field: 'employeeContrib', placeholder: 'e.g. 10000' },
+  { key: 'employerContrib', label: 'Employer Contributions',        input: true, field: 'employerContrib', placeholder: 'e.g. 30000' },
+  { key: 'totalContrib',    label: 'Total Contributions' },
+  { key: 'thresholdIncome', label: 'Threshold Income' },
+  { key: 'adjustedIncome',  label: 'Adjusted Income' },
+  { key: 'taperedAA',       label: 'Available Annual Allowance' },
+  { key: 'cfAvailable',     label: 'Carry Forward from Previous Years' },
+  { key: 'cfUsed',          label: 'Carry Forward Used' },
+  { key: 'cfToNext',        label: 'Carry Forward to Next Year' },
+  { key: 'relievedContrib', label: 'Relieved Contributions' },
+  { key: 'excess',          label: 'Excess Over Allowance' },
+];
 
-  const C = (cls, content) => `<div class="cell ${cls}">${content}</div>`;
-  const lastColClass = (i) => i === n - 1 ? 'no-border-right' : '';
-  const currentIdx = n - 1;
+function renderPension() {
+  const nCols = PENSION_COLS.length;
+  const nRows = PENSION_YEAR_KEYS.length;
+  const res = S.pensionResults;
+  const grid = document.getElementById('pensionGrid');
+  grid.style.gridTemplateColumns = `repeat(${nCols}, auto)`;
+
+  const dash = '<span class="result-dash">—</span>';
 
   let h = '';
 
-  // Column headers
-  h += C('cell-colhead label-col', '');
-  for (let i = 0; i < n; i++) {
-    const key = PENSION_YEAR_KEYS[i];
-    h += `<div class="cell cell-colhead value-col ${lastColClass(i)}">
-      <span class="col-num">${PENSION_YEARS[key].label}</span>
+  // Header row
+  for (let c = 0; c < nCols; c++) {
+    const col = PENSION_COLS[c];
+    const isLast = c === nCols - 1;
+    h += `<div class="cell cell-colhead ${c === 0 ? 'label-col' : 'value-col'} ${isLast ? 'no-border-right' : ''}">
+      <span class="col-num">${col.label}</span>
     </div>`;
   }
 
-  // Input rows
-  const inputRows = [
-    { label: 'Gross Income', field: 'grossIncome', placeholder: 'e.g. 300000' },
-    { label: 'Employer Contributions', field: 'employerContrib', placeholder: 'e.g. 30000' },
-    { label: 'Personal Contributions', field: 'personalContrib', placeholder: 'e.g. 10000' },
-  ];
+  // Data rows (one per tax year)
+  for (let r = 0; r < nRows; r++) {
+    const key = PENSION_YEAR_KEYS[r];
+    const yr = PENSION_YEARS[key];
+    const isLastRow = r === nRows - 1;
+    const bottomClass = isLastRow ? 'no-border-bottom' : '';
 
-  for (const row of inputRows) {
-    h += C('cell cell-input label-col', row.label);
-    for (let i = 0; i < n; i++) {
-      const key = PENSION_YEAR_KEYS[i];
-      h += `<div class="cell cell-input value-col ${lastColClass(i)}">
-        <div class="field">
-          <span class="field-pfx">£</span>
-          <input type="number" min="0" step="1000" placeholder="${row.placeholder}"
-            value="${esc(S.pension[key][row.field])}"
-            oninput="updatePensionField('${key}','${row.field}',this.value)">
-        </div>
-      </div>`;
+    for (let c = 0; c < nCols; c++) {
+      const col = PENSION_COLS[c];
+      const isLastCol = c === nCols - 1;
+      const rightClass = isLastCol ? 'no-border-right' : '';
+
+      if (col.key === 'taxYear') {
+        h += `<div class="cell label-col pension-year-cell ${bottomClass} ${rightClass}">${yr.label}</div>`;
+      } else if (col.input) {
+        h += `<div class="cell cell-input value-col ${bottomClass} ${rightClass}">
+          <div class="field">
+            <span class="field-pfx">£</span>
+            <input type="number" min="0" step="1000" placeholder="${col.placeholder}"
+              value="${esc(S.pension[key][col.field])}"
+              data-pension-input data-pension-year="${key}" data-pension-field="${col.field}"
+              oninput="updatePensionField('${key}','${col.field}',this.value)">
+          </div>
+        </div>`;
+      } else {
+        const val = res ? res[key][col.key] : null;
+        h += `<div class="cell value-col ${bottomClass} ${rightClass}">${res ? fmt(val) : dash}</div>`;
+      }
     }
-  }
-
-  // Computed rows
-  h += C('cell label-col', 'Threshold Income');
-  for (let i = 0; i < n; i++) {
-    const key = PENSION_YEAR_KEYS[i];
-    h += C(`cell value-col ${lastColClass(i)}`, fmt(res[key].thresholdIncome));
-  }
-
-  h += C('cell label-col', 'Adjusted Income');
-  for (let i = 0; i < n; i++) {
-    const key = PENSION_YEAR_KEYS[i];
-    h += C(`cell value-col ${lastColClass(i)}`, fmt(res[key].adjustedIncome));
-  }
-
-  h += C('cell label-col', 'Annual Allowance');
-  for (let i = 0; i < n; i++) {
-    const key = PENSION_YEAR_KEYS[i];
-    h += C(`cell value-col ${lastColClass(i)}`, fmt(res[key].taperedAA));
-  }
-
-  // Pension used input
-  h += C('cell cell-input label-col', 'Pension Used');
-  for (let i = 0; i < n; i++) {
-    const key = PENSION_YEAR_KEYS[i];
-    h += `<div class="cell cell-input value-col ${lastColClass(i)}">
-      <div class="field">
-        <span class="field-pfx">£</span>
-        <input type="number" min="0" step="1000" placeholder="e.g. 20000"
-          value="${esc(S.pension[key].pensionUsed)}"
-          oninput="updatePensionField('${key}','pensionUsed',this.value)">
-      </div>
-    </div>`;
-  }
-
-  // Unused allowance
-  h += C('cell label-col', 'Unused Allowance');
-  for (let i = 0; i < n; i++) {
-    const key = PENSION_YEAR_KEYS[i];
-    h += C(`cell value-col ${lastColClass(i)}`, fmt(res[key].unused));
-  }
-
-  // Carry forward (only current year)
-  h += C('cell cell-total label-col', 'Carry Forward Available');
-  for (let i = 0; i < n; i++) {
-    h += C(`cell cell-total value-col ${lastColClass(i)}`, i === currentIdx ? fmt(res._carryForward) : '—');
-  }
-
-  // Total available (only current year)
-  h += C('cell cell-takehome label-col no-border-bottom', 'Total Available');
-  for (let i = 0; i < n; i++) {
-    h += C(`cell cell-takehome value-col ${lastColClass(i)} no-border-bottom`, i === currentIdx ? fmt(res._totalAvailable) : '—');
   }
 
   grid.innerHTML = h;
