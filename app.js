@@ -324,7 +324,7 @@ function calculate() {
 
   const hasInvalid = S.cols.some(c => c.taxCode.trim() && !validateTaxCode(c.taxCode));
   if (hasInvalid) {
-    setNote('One or more tax codes are invalid. Please correct them before calculating.', '#dc2626');
+    setNote('One or more tax codes are invalid. Please correct them before calculating.', 'var(--red)');
     return;
   }
 
@@ -344,11 +344,11 @@ function calculate() {
 
   const anyValid = S.results.some(r => r !== null);
   if (anyValid) {
-    setNote('Results updated.', 'var(--green-600)');
+    setNote('Results updated.', 'var(--accent)');
     document.getElementById('grid').classList.add('results-appear');
     setTimeout(() => document.getElementById('grid').classList.remove('results-appear'), 300);
   } else {
-    setNote('Please enter at least one annual salary.', 'var(--gray-400)');
+    setNote('Please enter at least one annual salary.', 'var(--ink-4)');
   }
 
   render();
@@ -358,7 +358,7 @@ function updateCol(i, field, val) {
   S.cols[i][field] = val;
   if (S.results) {
     S.results = null;
-    setNote('Details changed — press Calculate to update.', 'var(--gray-400)');
+    setNote('Details changed — press Calculate to update.', 'var(--ink-4)');
   }
   if (field === 'bonus') {
     render();
@@ -487,7 +487,7 @@ function updatePensionField(yearKey, field, value) {
   S.pension[yearKey][field] = value;
   if (S.pensionResults) {
     S.pensionResults = null;
-    setPensionNote('Details changed — press Calculate to update.', 'var(--gray-400)');
+    setPensionNote('Details changed — press Calculate to update.', 'var(--ink-4)');
     renderPension();
   }
 }
@@ -514,18 +514,17 @@ function calculatePension() {
   });
 
   if (anyInput) {
-    setPensionNote('Results updated.', 'var(--green-600)');
+    setPensionNote('Results updated.', 'var(--accent)');
     document.getElementById('pensionGrid').classList.add('results-appear');
     setTimeout(() => document.getElementById('pensionGrid').classList.remove('results-appear'), 300);
   } else {
-    setPensionNote('Please enter income or contributions for at least one year.', 'var(--gray-400)');
+    setPensionNote('Please enter income or contributions for at least one year.', 'var(--ink-4)');
   }
 
   renderPension();
 }
 
-const PENSION_COLS = [
-  { key: 'taxYear',         label: 'Tax Year' },
+const PENSION_ROWS = [
   { key: 'taxableIncome',   label: 'Taxable Income',                input: true, field: 'taxableIncome', placeholder: 'e.g. 300000' },
   { key: 'employeeContrib', label: 'Employee Contributions',        input: true, field: 'employeeContrib', placeholder: 'e.g. 10000' },
   { key: 'employerContrib', label: 'Employer Contributions',        input: true, field: 'employerContrib', placeholder: 'e.g. 30000' },
@@ -533,7 +532,7 @@ const PENSION_COLS = [
   { key: 'thresholdIncome', label: 'Threshold Income' },
   { key: 'adjustedIncome',  label: 'Adjusted Income' },
   { key: 'taperedAA',       label: 'Available Annual Allowance' },
-  { key: 'cfAvailable',     label: 'Carry Forward from Previous Years' },
+  { key: 'cfAvailable',     label: 'Carry Forward from Previous' },
   { key: 'cfUsed',          label: 'Carry Forward Used' },
   { key: 'cfToNext',        label: 'Carry Forward to Next Year' },
   { key: 'relievedContrib', label: 'Relieved Contributions' },
@@ -541,52 +540,51 @@ const PENSION_COLS = [
 ];
 
 function renderPension() {
-  const nCols = PENSION_COLS.length;
-  const nRows = PENSION_YEAR_KEYS.length;
+  const nYears = PENSION_YEAR_KEYS.length;
   const res = S.pensionResults;
   const grid = document.getElementById('pensionGrid');
-  grid.style.gridTemplateColumns = `repeat(${nCols}, auto)`;
+  grid.style.gridTemplateColumns = `var(--label-w) repeat(${nYears}, var(--col-w))`;
 
   const dash = '<span class="result-dash">—</span>';
+  const lastColClass = (i) => i === nYears - 1 ? 'no-border-right' : '';
 
   let h = '';
 
-  // Header row
-  for (let c = 0; c < nCols; c++) {
-    const col = PENSION_COLS[c];
-    const isLast = c === nCols - 1;
-    h += `<div class="cell cell-colhead ${c === 0 ? 'label-col' : 'value-col'} ${isLast ? 'no-border-right' : ''}">
-      <span class="col-num">${col.label}</span>
+  // Header row: empty label + one column per year
+  h += `<div class="cell cell-colhead label-col"></div>`;
+  for (let i = 0; i < nYears; i++) {
+    const key = PENSION_YEAR_KEYS[i];
+    h += `<div class="cell cell-colhead value-col ${lastColClass(i)}">
+      <span class="col-num">${PENSION_YEARS[key].label}</span>
     </div>`;
   }
 
-  // Data rows (one per tax year)
-  for (let r = 0; r < nRows; r++) {
-    const key = PENSION_YEAR_KEYS[r];
-    const yr = PENSION_YEARS[key];
-    const isLastRow = r === nRows - 1;
+  // One row per field
+  for (let r = 0; r < PENSION_ROWS.length; r++) {
+    const row = PENSION_ROWS[r];
+    const isLastRow = r === PENSION_ROWS.length - 1;
     const bottomClass = isLastRow ? 'no-border-bottom' : '';
 
-    for (let c = 0; c < nCols; c++) {
-      const col = PENSION_COLS[c];
-      const isLastCol = c === nCols - 1;
-      const rightClass = isLastCol ? 'no-border-right' : '';
+    // Label cell
+    h += `<div class="cell ${row.input ? 'cell-input' : ''} label-col ${bottomClass}">${row.label}</div>`;
 
-      if (col.key === 'taxYear') {
-        h += `<div class="cell label-col pension-year-cell ${bottomClass} ${rightClass}">${yr.label}</div>`;
-      } else if (col.input) {
-        h += `<div class="cell cell-input value-col ${bottomClass} ${rightClass}">
+    // Value cells (one per year)
+    for (let i = 0; i < nYears; i++) {
+      const key = PENSION_YEAR_KEYS[i];
+
+      if (row.input) {
+        h += `<div class="cell cell-input value-col ${bottomClass} ${lastColClass(i)}">
           <div class="field">
             <span class="field-pfx">£</span>
-            <input type="number" min="0" step="1000" placeholder="${col.placeholder}"
-              value="${esc(S.pension[key][col.field])}"
-              data-pension-input data-pension-year="${key}" data-pension-field="${col.field}"
-              oninput="updatePensionField('${key}','${col.field}',this.value)">
+            <input type="number" min="0" step="1000" placeholder="${row.placeholder}"
+              value="${esc(S.pension[key][row.field])}"
+              data-pension-input data-pension-year="${key}" data-pension-field="${row.field}"
+              oninput="updatePensionField('${key}','${row.field}',this.value)">
           </div>
         </div>`;
       } else {
-        const val = res ? res[key][col.key] : null;
-        h += `<div class="cell value-col ${bottomClass} ${rightClass}">${res ? fmt(val) : dash}</div>`;
+        const val = res ? res[key][row.key] : null;
+        h += `<div class="cell value-col ${bottomClass} ${lastColClass(i)}">${res ? fmt(val) : dash}</div>`;
       }
     }
   }

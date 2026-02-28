@@ -4,21 +4,26 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>HenryWise</title>
-  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600&display=swap" rel="stylesheet">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=DM+Serif+Text:ital@0;1&family=Albert+Sans:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
   <link rel="stylesheet" href="styles.css">
 </head>
 <body>
 <div class="page">
 
   <header class="page-header">
-    <div class="logo"><span class="logo-henry">Henry</span><span class="logo-wise">Wise</span></div>
-    <p>UK Tax Calculator — Estimate your take-home pay under PAYE</p>
+    <div class="logo">
+      <span class="logo-henry">Henry</span><span class="logo-wise">Wise</span>
+    </div>
+    <p class="tagline">UK Tax Calculator</p>
   </header>
 
-  <div class="tab-bar">
-    <button class="tab active" data-tab="calculator" onclick="switchTab('calculator')">Take-Home Calculator</button>
-    <button class="tab" data-tab="pension" onclick="switchTab('pension')">Pension Tapering</button>
-  </div>
+  <nav class="tab-bar">
+    <button class="tab active" data-tab="calculator" onclick="switchTab('calculator')">Take-Home</button>
+    <button class="tab" data-tab="pension" onclick="switchTab('pension')">Pension</button>
+    <div class="tab-indicator"></div>
+  </nav>
 
   <div id="tab-calculator">
 
@@ -32,14 +37,16 @@
     </div>
   </div>
 
-  <div class="table-scroll">
-    <div class="calc-grid" id="grid"></div>
+  <div class="card">
+    <div class="table-scroll">
+      <div class="calc-grid" id="grid"></div>
+    </div>
   </div>
 
   <div class="calc-action">
     <button class="btn btn-primary" id="calcBtn" onclick="calculate()">
-      <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12h14M12 5l7 7-7 7"/></svg>
       Calculate
+      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12h14M12 5l7 7-7 7"/></svg>
     </button>
     <span class="calc-note" id="calcNote">Enter your details above, then press Calculate.</span>
   </div>
@@ -51,17 +58,19 @@
     Results are estimates only and do not constitute financial advice.
   </p>
 
-  </div><!-- /tab-calculator -->
+  </div>
 
   <div id="tab-pension" style="display:none">
-    <div class="table-scroll">
-      <div class="calc-grid" id="pensionGrid"></div>
+    <div class="card">
+      <div class="table-scroll">
+        <div class="calc-grid" id="pensionGrid"></div>
+      </div>
     </div>
 
     <div class="calc-action">
       <button class="btn btn-primary" id="pensionCalcBtn" onclick="calculatePension()">
-        <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12h14M12 5l7 7-7 7"/></svg>
         Calculate
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12h14M12 5l7 7-7 7"/></svg>
       </button>
       <span class="calc-note" id="pensionCalcNote">Enter your details above, then press Calculate.</span>
     </div>
