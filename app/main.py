@@ -3,7 +3,7 @@ import streamlit as st
 from take_home import TaxRate, IncomeThreshold, calculate_take_home, TakeHomeResults
 
 TAX_RATE = TaxRate(0, 0.20, 0.40, 0.45)
-THRESHOLD = IncomeThreshold(12570, 50270, 125140)
+THRESHOLD = IncomeThreshold.from_thresholds(12570, 50270, 125140)
 
 st.set_page_config(page_title="HenryWise UK", page_icon="💷")
 
