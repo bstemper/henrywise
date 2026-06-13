@@ -1,5 +1,10 @@
 from dataclasses import dataclass, replace
 
+# Adjusted net income where the Personal Allowance starts tapering.
+PERSONAL_ALLOWANCE_TAPER_START = 100_000
+# £1 of allowance lost per £2 of income above the start.
+PERSONAL_ALLOWANCE_TAPER_DIVISOR = 2
+
 
 @dataclass
 class TaxBands:
@@ -89,24 +94,12 @@ class TakeHomeResults:
         return self.total_comp - self.total_tax - self.reliefs
 
 
-# Adjusted net income where the Personal Allowance starts tapering.
-TAPER_START = 100_000
-# £1 of allowance lost per £2 of income above the start.
-TAPER_DIVISOR = 2
-
-
 def effective_personal_allowance(adjusted_net_income: int, base_allowance: int) -> int:
-    """Personal Allowance after the >£100k taper (£1 lost per £2 over the threshold)."""
-    excess = max(adjusted_net_income - TAPER_START, 0)
-    return max(base_allowance - excess // TAPER_DIVISOR, 0)
+    excess = max(adjusted_net_income - PERSONAL_ALLOWANCE_TAPER_START, 0)
+    return max(base_allowance - excess // PERSONAL_ALLOWANCE_TAPER_DIVISOR, 0)
 
 
 def tapered_bands(bands: TaxBands, adjusted_net_income: int) -> TaxBands:
-    """Rebuild the threshold with the tapered allowance, keeping band widths fixed.
-
-    Only the allowance moves; the basic/higher band widths are fixed by law, so
-    the gross boundaries slide down with it.
-    """
     pa = effective_personal_allowance(adjusted_net_income, bands.personal)
     return replace(bands, personal=pa)
 
