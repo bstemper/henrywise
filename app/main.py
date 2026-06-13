@@ -1,100 +1,119 @@
 import pandas as pd
 import streamlit as st
-from take_home import TaxRate, IncomeThreshold, calculate_take_home, TakeHomeResults
+from take_home import TaxRate, TaxBands, calculate_take_home
 
+# 2026/27, rest of UK. A tax code in the UI overrides the personal allowance.
 TAX_RATE = TaxRate(0, 0.20, 0.40, 0.45)
-THRESHOLD = IncomeThreshold.from_thresholds(12570, 50270, 125140)
+THRESHOLD = TaxBands.from_thresholds(12_570, 50_270, 125_140)
 
 st.set_page_config(page_title="HenryWise UK", page_icon="💷")
 
 st.title("💷 HenryWise UK ")
-st.caption(f"All the calculators a Henry needs to manage their money")
+st.caption("All the calculators a Henry needs to manage their money")
 
 
-tab1, tab2 = st.tabs(["Take-home pay", "Pension tapering"])
-col_left, col_right = st.columns([1, 1])
+def render_job(title: str, key_prefix: str) -> None:
+    """Render one job's inputs and its take-home breakdown."""
+    st.subheader(title)
+    base = st.number_input(
+        "Annual base salary (£)",
+        key=f"{key_prefix}_base",
+        min_value=0,
+        value=125_000,
+        step=5_000,
+    )
+    bonus = st.number_input(
+        "Annual bonus (£)",
+        key=f"{key_prefix}_bonus",
+        min_value=0,
+        value=50_000,
+        step=5_000,
+    )
+    pension_pct = st.number_input(
+        "Pension contribution (%)",
+        key=f"{key_prefix}_pension",
+        min_value=0,
+        max_value=100,
+        value=5,
+        step=1,
+        help="Modelled as salary sacrifice — taken off pay before tax. "
+        "Applied to base.",
+    )
+    tax_code = st.text_input(
+        "Tax code",
+        key=f"{key_prefix}_tax_code",
+        value="1257L",
+        help="Leave blank for the standard allowance. Scottish/Welsh (S/C) "
+        "and K codes aren't supported.",
+    )
 
-with tab1:
-    with col_left:
-        st.subheader("Job 1 Details")
-        base1 = st.number_input(
-            label="Annual base salary (£)",
-            key="job1_annual_base",
-            min_value=0,
-            value=125_000,
-            step=5_000,
+    pension = base * pension_pct / 100
+    try:
+        result = calculate_take_home(
+            base,
+            bonus,
+            THRESHOLD,
+            TAX_RATE,
+            reliefs=pension,
+            tax_code=tax_code,
         )
-        bonus1 = st.number_input(
-            label="Annual bonus (£)",
-            key="job1_annual_bonus",
-            min_value=0,
-            value=50_000,
-            step=5_000,
-        )
-        pension_percentage1 = st.number_input(
-            label="Pension contribution (%)",
-            key="job1_pension_contribution",
-            min_value=0,
-            max_value=100,
-            value=5,
-            step=1,
-        )
-        tax_code1 = st.text_input(label="Tax code", key="tax_code1", value="1280L")
+    except ValueError as err:
+        st.error(f"Couldn't calculate take-home: {err}")
+        return
 
-        job1_result: TakeHomeResults = calculate_take_home(
-            base1, bonus1, THRESHOLD, TAX_RATE
-        )
+    st.subheader("Your take-home pay")
+    c1, c2 = st.columns(2)
+    c1.metric("Monthly", f"£{result.take_home / 12:,.0f}")
+    c2.metric("Annual", f"£{result.take_home:,.0f}")
 
-        st.subheader("Your take-home pay")
-        c1, c2 = st.columns(2)
-        c1.metric("Monthly", f"£{180000 / 12:,.0f}")
-        c2.metric("Annual", f"£{180000:,.0f}")
+    # Breakdown — annual and monthly.
+    rows = [
+        ("Total comp", result.total_comp),
+        ("Pension", result.reliefs),
+        ("Taxable income", result.taxable_income),
+        ("Income tax", result.total_tax),
+        ("Take-home", result.take_home),
+    ]
+    st.dataframe(
+        pd.DataFrame(
+            [
+                {
+                    "Item": label,
+                    "Annual": f"£{value:,.0f}",
+                    "Monthly": f"£{value / 12:,.0f}",
+                }
+                for label, value in rows
+            ]
+        ),
+        hide_index=True,
+        width="stretch",
+    )
 
-        st.subheader("Where your salary goes")
-        chart_data = pd.DataFrame(
-            {
-                "Amount": [
-                    job1_result.taxable_income,
-                    job1_result.basic_tax,
-                    job1_result.higher_tax,
-                    job1_result.additional_tax,
-                ],
-            },
-            index=["Taxable Income", "Basic Tax", "Higher Tax", "Additional Tax"],
-        )
+    # Where the gross comp goes — these three sum to total comp.
+    st.subheader("Where your salary goes")
+    chart_data = pd.DataFrame(
+        {"Amount": [result.take_home, result.total_tax, result.reliefs]},
+        index=["Take-home", "Income tax", "Pension"],
+    )
     chart_data = chart_data[chart_data["Amount"] > 0]
     st.bar_chart(chart_data, horizontal=True)
 
-    with col_right:
-        st.subheader("Job 2 Details")
-        base2 = st.number_input(
-            label="Annual base salary (£)",
-            key="job2_annual_base",
-            min_value=0,
-            value=125_000,
-            step=5_000,
-        )
-        bonus1 = st.number_input(
-            label="Annual bonus (£)",
-            key="job2_annual_bonus",
-            min_value=0,
-            value=50_000,
-            step=5_000,
-        )
-        pension_percentage1 = st.number_input(
-            label="Pension contribution (%)",
-            key="job2_pension_contribution",
-            min_value=0,
-            max_value=100,
-            value=5,
-            step=1,
-        )
-        tax_code2 = st.text_input(label="Tax code", key="tax_code2", value="1280L")
 
-        st.subheader("Your take-home pay")
-        c1, c2 = st.columns(2)
-        c1.metric("Monthly", f"£{180000 / 12:,.0f}")
-        c2.metric("Annual", f"£{180000:,.0f}")
+tab1, tab2 = st.tabs(["Take-home pay", "Pension tapering"])
+
+with tab1:
+    col_left, col_right = st.columns(2)
+    with col_left:
+        render_job("Job 1 Details", "job1")
+    with col_right:
+        render_job("Job 2 Details", "job2")
 
 with tab2:
-    st.subheader("Pension")
+    st.subheader("Pension tapering")
+    st.info("Coming soon.")
+
+st.caption(
+    "Estimate only — income tax (incl. the £100k allowance taper) on PAYE "
+    "earnings for the rest of the UK. Excludes National Insurance, student "
+    "loans, and Scottish/Welsh rates."
+)
