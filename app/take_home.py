@@ -1,12 +1,15 @@
 from __future__ import annotations
 
 import re
+from collections.abc import Sequence
 from dataclasses import dataclass
 
 # Adjusted net income where the Personal Allowance starts tapering.
 PERSONAL_ALLOWANCE_TAPER_START = 100_000
 # £1 of allowance lost per £2 of income above the start.
 PERSONAL_ALLOWANCE_TAPER_DIVISOR = 2
+# Pay is modelled as twelve equal months, with each bonus landing in one month.
+MONTHS_PER_YEAR = 12
 
 
 @dataclass
@@ -90,6 +93,8 @@ class TakeHomeResults:
     higher_tax: int
     additional_tax: int
     reliefs: int = 0  # money diverted pre-tax, e.g. a pension contribution
+    annual_base: int = 0  # gross base salary, before reliefs
+    bonuses: tuple[int, ...] = ()  # individual bonuses actually paid, in order
 
     def __post_init__(self):
         if self.total_comp < 0:
@@ -102,12 +107,17 @@ class TakeHomeResults:
             "higher_tax",
             "additional_tax",
             "reliefs",
+            "annual_base",
         ):
             value = getattr(self, name)
             if not 0 <= value <= self.total_comp:
                 raise ValueError(
                     f"Need 0 <= {name} <= total_comp ({self.total_comp}), got {value}."
                 )
+
+        for bonus in self.bonuses:
+            if bonus < 0:
+                raise ValueError(f"Need each bonus >= 0, got {bonus}.")
 
         # Tax bands fill from the bottom up: a band is only taxed once every
         # lower band is.
@@ -133,6 +143,31 @@ class TakeHomeResults:
         # (e.g. into a pension) has come out.
         return self.total_comp - self.total_tax - self.reliefs
 
+    @property
+    def keep_rate(self) -> float:
+        """Fraction of each gross pound kept, after tax and pre-tax diversions."""
+        return self.take_home / self.total_comp if self.total_comp else 0.0
+
+    @property
+    def non_bonus_month(self) -> float:
+        """Take-home in a month with no bonus paid.
+
+        We apply the overall keep rate to every pound, so a normal month
+        reflects the true tax bracket rather than taxing the base alone at the
+        low bands it would occupy on its own.
+        """
+        return self.annual_base * self.keep_rate / MONTHS_PER_YEAR
+
+    @property
+    def bonus_months(self) -> list[float]:
+        """Take-home for each bonus month: a normal month plus that bonus's net.
+
+        One entry per bonus paid, in order. A bonus lands in a single month, so
+        its whole net is added there; with the remaining normal months these sum
+        to the annual take-home.
+        """
+        return [self.non_bonus_month + bonus * self.keep_rate for bonus in self.bonuses]
+
 
 def effective_personal_allowance(adjusted_net_income: int, base_allowance: int) -> int:
     excess = max(adjusted_net_income - PERSONAL_ALLOWANCE_TAPER_START, 0)
@@ -141,13 +176,21 @@ def effective_personal_allowance(adjusted_net_income: int, base_allowance: int) 
 
 def calculate_take_home(
     annual_base: int,
-    annual_bonus: int,
+    annual_bonuses: Sequence[int],
     bands: TaxBands,
     tax_rate: TaxRate,
     reliefs: int = 0,
     tax_code: str | None = None,
 ) -> TakeHomeResults:
-    total_comp = annual_base + annual_bonus
+    """Compute annual take-home plus a per-month cash-flow split.
+
+    ``annual_bonuses`` is the list of bonus payments made during the year, each
+    paid in its own month. Tax is annual, so only their total affects it, but
+    the result also exposes the take-home for a normal month and for each bonus
+    month (see ``TakeHomeResults``).
+    """
+    paid_bonuses = tuple(b for b in annual_bonuses if b > 0)
+    total_comp = annual_base + sum(annual_bonuses)
     adjusted_net_income = total_comp - reliefs
 
     if not tax_code or not tax_code.strip():  # None/blank UI field → standard allowance
@@ -169,4 +212,6 @@ def calculate_take_home(
         income_in_higher * tax_rate.higher,
         income_in_additional * tax_rate.additional,
         reliefs,
+        annual_base=annual_base,
+        bonuses=paid_bonuses,
     )

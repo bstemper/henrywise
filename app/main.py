@@ -22,12 +22,21 @@ def render_job(title: str, key_prefix: str) -> None:
         value=125_000,
         step=5_000,
     )
-    bonus = st.number_input(
-        "Annual bonus (£)",
-        key=f"{key_prefix}_bonus",
+    bonus1 = st.number_input(
+        "Bonus 1 (£)",
+        key=f"{key_prefix}_bonus1",
         min_value=0,
         value=50_000,
         step=5_000,
+    )
+    bonus2 = st.number_input(
+        "Bonus 2 (£)",
+        key=f"{key_prefix}_bonus2",
+        min_value=0,
+        value=0,
+        step=5_000,
+        help="A second bonus paid in a different month. Leave at 0 if you only "
+        "get one.",
     )
     pension_pct = st.number_input(
         "Pension contribution (%)",
@@ -51,7 +60,7 @@ def render_job(title: str, key_prefix: str) -> None:
     try:
         result = calculate_take_home(
             base,
-            bonus,
+            [bonus1, bonus2],
             THRESHOLD,
             TAX_RATE,
             reliefs=pension,
@@ -61,10 +70,26 @@ def render_job(title: str, key_prefix: str) -> None:
         st.error(f"Couldn't calculate take-home: {err}")
         return
 
+    # The year splits into normal months and one month per bonus; that logic
+    # lives in TakeHomeResults. Here we just label a metric for each month plus
+    # the annual total.
+    bonus_months = result.bonus_months
+
     st.subheader("Your take-home pay")
-    c1, c2 = st.columns(2)
-    c1.metric("Monthly", f"£{result.take_home / 12:,.0f}")
-    c2.metric("Annual", f"£{result.take_home:,.0f}")
+    metrics = [
+        (
+            "Monthly (no bonus)" if bonus_months else "Monthly",
+            result.non_bonus_month,
+            "A month with no bonus paid." if bonus_months else None,
+        )
+    ]
+    for i, month in enumerate(bonus_months, start=1):
+        label = "Bonus month" if len(bonus_months) == 1 else f"Bonus month {i}"
+        metrics.append((label, month, "The month this bonus lands."))
+    metrics.append(("Annual", result.take_home, None))
+
+    for col, (label, value, help_text) in zip(st.columns(len(metrics)), metrics):
+        col.metric(label, f"£{value:,.0f}", help=help_text)
 
     # Breakdown — annual and monthly.
     rows = [
