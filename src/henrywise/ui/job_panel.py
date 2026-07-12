@@ -59,12 +59,18 @@ def collect_job_inputs(key_prefix: str) -> JobInputs:
         step=1,
         help="Modelled as salary sacrifice — taken off pay before tax. Applied to base.",
     )
+    # Blank by default: we work the allowance out ourselves, taper included.
+    # A code entered here is taken at face value (a real HMRC code already has
+    # any taper baked into its number), so defaulting to "1257L" would hand a
+    # full allowance to someone over £100k who never asked for one.
     tax_code = st.text_input(
         "Tax code",
         key=f"{key_prefix}_tax_code",
-        value="1257L",
-        help="Leave blank for the standard allowance. Scottish/Welsh (S/C) "
-        "and K codes aren't supported.",
+        value="",
+        placeholder="Worked out for you",
+        help="Leave blank and we'll apply the standard allowance, tapered away "
+        "above £100k. Enter a code to use it as-is. Scottish/Welsh (S/C) and "
+        "K codes aren't supported.",
     )
     return JobInputs(base, [bonus1, bonus2], pension_pct, tax_code)
 
