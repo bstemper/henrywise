@@ -1,13 +1,13 @@
+"""Value types for a take-home calculation.
+
+Pure data + invariants. Nothing here knows about Streamlit, or about any
+particular tax year — the year's numbers live in :mod:`henrywise.tax.rates`.
+"""
+
 from __future__ import annotations
 
-import re
-from collections.abc import Sequence
 from dataclasses import dataclass
 
-# Adjusted net income where the Personal Allowance starts tapering.
-PERSONAL_ALLOWANCE_TAPER_START = 100_000
-# £1 of allowance lost per £2 of income above the start.
-PERSONAL_ALLOWANCE_TAPER_DIVISOR = 2
 # Pay is modelled as twelve equal months, with each bonus landing in one month.
 MONTHS_PER_YEAR = 12
 
@@ -48,53 +48,16 @@ class TaxRate:
                 raise ValueError(f"Need {name} rate between 0 and 1, got {rate}.")
 
 
-# Trailing "emergency" (non-cumulative) marker — irrelevant to an annual total.
-_EMERGENCY = re.compile(r"\s*(W1|M1|X)$")
-
-
-def parse_tax_code(raw: str) -> int:
-    """Return the tax-free personal allowance (£) a UK PAYE tax code grants.
-
-    Supports the numeric codes: ``1257L`` and friends (suffix L/M/N/T), plus
-    ``0T`` (zero allowance). A trailing emergency marker (``W1``/``M1``/``X``)
-    is accepted but ignored.
-
-    Region-prefixed codes (``S`` for Scotland, ``C`` for Wales) are rejected:
-    Scotland has its own bands and rates that this calculator doesn't model,
-    so accepting one would silently apply the wrong (rest-of-UK) tax.
-
-    K codes (a negative allowance) and the whole-regime codes (NT, BR, D0, D1)
-    are not supported.
-    """
-    code = raw.strip().upper()
-    if not code:
-        raise ValueError("Tax code is empty.")
-
-    # A region prefix means a tax regime we don't model — refuse rather than
-    # silently taxing a Scottish/Welsh code at rest-of-UK rates.
-    if code[0] in ("S", "C") and len(code) > 1:
-        raise ValueError(f"Region-prefixed codes aren't supported, got {raw!r}.")
-    # Drop a non-cumulative "emergency" marker; it doesn't change the year's total.
-    code = _EMERGENCY.sub("", code).strip()
-
-    if code.startswith("K"):
-        raise ValueError(f"K codes aren't supported, got {raw!r}.")
-    match = re.fullmatch(r"(\d+)[LMNT]?", code)  # also matches "0T"
-    if match:
-        return int(match.group(1)) * 10
-    raise ValueError(f"Unrecognised tax code {raw!r}.")
-
-
 @dataclass
 class TakeHomeResults:
-    total_comp: int
-    taxable_income: int
-    basic_tax: int
-    higher_tax: int
-    additional_tax: int
-    reliefs: int = 0  # money diverted pre-tax, e.g. a pension contribution
-    annual_base: int = 0  # gross base salary, before reliefs
-    bonuses: tuple[int, ...] = ()  # individual bonuses actually paid, in order
+    total_comp: float
+    taxable_income: float
+    basic_tax: float
+    higher_tax: float
+    additional_tax: float
+    reliefs: float = 0  # money diverted pre-tax, e.g. a pension contribution
+    annual_base: float = 0  # gross base salary, before reliefs
+    bonuses: tuple[float, ...] = ()  # individual bonuses actually paid, in order
 
     def __post_init__(self):
         if self.total_comp < 0:
@@ -134,11 +97,11 @@ class TakeHomeResults:
             raise ValueError("Cannot have tax when taxable_income <= 0.")
 
     @property
-    def total_tax(self):
+    def total_tax(self) -> float:
         return self.basic_tax + self.higher_tax + self.additional_tax
 
     @property
-    def take_home(self):
+    def take_home(self) -> float:
         # Spendable cash: what's left after tax and after money diverted pre-tax
         # (e.g. into a pension) has come out.
         return self.total_comp - self.total_tax - self.reliefs
@@ -167,51 +130,3 @@ class TakeHomeResults:
         to the annual take-home.
         """
         return [self.non_bonus_month + bonus * self.keep_rate for bonus in self.bonuses]
-
-
-def effective_personal_allowance(adjusted_net_income: int, base_allowance: int) -> int:
-    excess = max(adjusted_net_income - PERSONAL_ALLOWANCE_TAPER_START, 0)
-    return max(base_allowance - excess // PERSONAL_ALLOWANCE_TAPER_DIVISOR, 0)
-
-
-def calculate_take_home(
-    annual_base: int,
-    annual_bonuses: Sequence[int],
-    bands: TaxBands,
-    tax_rate: TaxRate,
-    reliefs: int = 0,
-    tax_code: str | None = None,
-) -> TakeHomeResults:
-    """Compute annual take-home plus a per-month cash-flow split.
-
-    ``annual_bonuses`` is the list of bonus payments made during the year, each
-    paid in its own month. Tax is annual, so only their total affects it, but
-    the result also exposes the take-home for a normal month and for each bonus
-    month (see ``TakeHomeResults``).
-    """
-    paid_bonuses = tuple(b for b in annual_bonuses if b > 0)
-    total_comp = annual_base + sum(annual_bonuses)
-    adjusted_net_income = total_comp - reliefs
-
-    if not tax_code or not tax_code.strip():  # None/blank UI field → standard allowance
-        personal = effective_personal_allowance(adjusted_net_income, bands.personal)
-    else:
-        personal = parse_tax_code(tax_code)
-
-    taxable_income = max(total_comp - personal - reliefs, 0)
-
-    # Split taxable income into the slice that falls in each band.
-    income_in_basic = min(taxable_income, bands.basic_band)
-    income_in_higher = min(max(taxable_income - bands.basic_band, 0), bands.higher_band)
-    income_in_additional = max(taxable_income - bands.basic_band - bands.higher_band, 0)
-
-    return TakeHomeResults(
-        total_comp,
-        taxable_income,
-        income_in_basic * tax_rate.basic,
-        income_in_higher * tax_rate.higher,
-        income_in_additional * tax_rate.additional,
-        reliefs,
-        annual_base=annual_base,
-        bonuses=paid_bonuses,
-    )

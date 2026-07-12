@@ -1,0 +1,31 @@
+[project]
+name = "henrywise"
+version = "0.1.0"
+description = "UK take-home pay and pension calculators"
+requires-python = ">=3.10"
+dependencies = [
+    "streamlit==1.58.0",
+    "pandas==2.3.3",
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest==8.4.2",
+    "ruff==0.15.17",
+]
+
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+
+[tool.ruff]
+src = ["src", "tests"]
+
+[tool.ruff.lint]
+extend-select = ["I"]  # import sorting
