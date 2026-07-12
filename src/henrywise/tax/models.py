@@ -58,10 +58,18 @@ class TakeHomeResults:
     reliefs: float = 0  # money diverted pre-tax, e.g. a pension contribution
     annual_base: float = 0  # gross base salary, before reliefs
     bonuses: tuple[float, ...] = ()  # individual bonuses actually paid, in order
+    # The allowance actually applied: tapered, or read off a tax code. Not
+    # bounded by total_comp — someone earning £5k still has the full allowance,
+    # they just can't use all of it.
+    personal_allowance: float = 0
 
     def __post_init__(self):
         if self.total_comp < 0:
             raise ValueError(f"Need total_comp >= 0, got {self.total_comp}.")
+        if self.personal_allowance < 0:
+            raise ValueError(
+                f"Need personal_allowance >= 0, got {self.personal_allowance}."
+            )
 
         # Every component sits between zero and total compensation.
         for name in (

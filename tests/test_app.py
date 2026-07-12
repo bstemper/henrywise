@@ -7,8 +7,20 @@ from streamlit.testing.v1 import AppTest
 
 from henrywise.tax import rates
 from henrywise.tax.take_home import calculate_take_home
+from henrywise.ui.format import money, percent
+from henrywise.ui.job_grid import FIGURE
 
 APP = str(Path(__file__).parent.parent / "src" / "henrywise" / "ui" / "app.py")
+
+
+def figures(app):
+    """Every take-home figure on the page, as rendered."""
+    return [m.value for m in app.markdown if m.value.startswith(FIGURE)]
+
+
+def breakdown(app, job):
+    """One job's column of the breakdown table, keyed by row label."""
+    return app.dataframe[0].value.set_index("Item")[job]
 
 
 @pytest.fixture
@@ -22,19 +34,24 @@ def test_app_renders_without_error(app):
     assert not app.error
 
 
-def test_both_job_panels_render(app):
-    subheaders = [s.value for s in app.subheader]
-    assert "Job 1 Details" in subheaders
-    assert "Job 2 Details" in subheaders
+def test_both_jobs_get_a_full_set_of_inputs(app):
+    keys = {w.key for w in app.number_input} | {w.key for w in app.text_input}
+    for job in ("job1", "job2"):
+        assert {f"{job}_base", f"{job}_bonus1", f"{job}_bonus2"} <= keys
+        assert {f"{job}_pension", f"{job}_tax_code"} <= keys
 
 
-def test_default_view_applies_the_100k_taper(app):
-    # Regression guard. The tax-code box used to default to "1257L", which is
-    # taken at face value and so skipped the taper — at the default £175k of
-    # comp that understated tax by £5,656. Blank means "work it out for me".
-    assert app.text_input[0].value == ""
+def test_a_shared_label_is_written_once_for_both_jobs(app):
+    # The point of the grid: the label sits in its own column, so the two jobs
+    # share it rather than each repeating it above their own box.
+    labels = [m.value for m in app.markdown]
+    assert labels.count("Annual base salary (£)") == 1
+    assert labels.count("Tax code") == 1
 
-    expected = calculate_take_home(
+
+@pytest.fixture
+def default_result():
+    return calculate_take_home(
         125_000,  # the default base
         [50_000, 0],  # the default bonuses
         rates.BANDS,
@@ -42,9 +59,41 @@ def test_default_view_applies_the_100k_taper(app):
         reliefs=6_250,  # the default 5% pension on base
         tax_code="",
     )
-    assert expected.taxable_income == 168_750  # allowance fully tapered away
-    assert app.metric[2].label == "Annual"
-    assert app.metric[2].value == f"£{expected.take_home:,.0f}"
+
+
+def test_default_view_applies_the_100k_taper(app, default_result):
+    # Regression guard. The tax-code box used to default to "1257L", which is
+    # taken at face value and so skipped the taper — at the default £175k of
+    # comp that understated tax by £5,656. Blank means "work it out for me".
+    assert app.text_input[0].value == ""
+    assert default_result.taxable_income == 168_750  # allowance fully tapered away
+
+    # Both jobs default to the same package, so both columns show the figure.
+    annual = f"{FIGURE} {money(default_result.take_home)}"
+    assert figures(app).count(annual) == 2
+
+
+def test_the_breakdown_is_annual_only(app):
+    table = app.dataframe[0].value
+    assert list(table.columns) == ["Item", "Job 1", "Job 2"]  # no monthly column
+    assert list(table["Item"]) == [
+        "Total compensation",
+        "Pension",
+        "Taxable income",
+        "Personal allowance",
+        "Income tax",
+        "Take rate",
+    ]
+
+
+def test_the_breakdown_reports_the_tapered_allowance_and_the_take_rate(
+    app, default_result
+):
+    job1 = breakdown(app, "Job 1")
+    # At £175k of comp the allowance is gone; showing it is the point of the row.
+    assert job1["Personal allowance"] == "£0"
+    assert job1["Take rate"] == percent(default_result.keep_rate)
+    assert job1["Income tax"] == money(default_result.total_tax)
 
 
 def test_an_unsupported_tax_code_shows_an_error_rather_than_crashing(app):

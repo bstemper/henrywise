@@ -28,6 +28,18 @@ class TestPersonalAllowanceTaper:
     def test_taper_rounds_down_to_whole_pounds(self):
         assert effective_personal_allowance(100_001, BANDS.personal) == 12_570
 
+    def test_the_allowance_applied_is_reported(self):
+        # The UI shows this: at £175k it's the difference between "we tapered it
+        # away" and "we forgot it".
+        assert take_home(50_000).personal_allowance == 12_570
+        assert take_home(200_000).personal_allowance == 0
+        assert take_home(60_000, tax_code="1000L").personal_allowance == 10_000
+
+    def test_a_low_earner_keeps_an_allowance_bigger_than_their_pay(self):
+        r = take_home(5_000)
+        assert r.personal_allowance == 12_570  # more than they earn — not an error
+        assert r.taxable_income == 0
+
 
 class TestBandBoundaries:
     def test_income_below_the_allowance_is_untaxed(self):

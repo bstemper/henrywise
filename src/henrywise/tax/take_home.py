@@ -59,4 +59,5 @@ def calculate_take_home(
         reliefs,
         annual_base=annual_base,
         bonuses=paid_bonuses,
+        personal_allowance=personal,
     )

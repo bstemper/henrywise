@@ -30,9 +30,16 @@ src/henrywise/
 │   └── take_home.py  the calculation
 └── ui/           streamlit — never contains a tax number
     ├── app.py        entry point, wiring only
-    ├── job_panel.py  one job's inputs + results
+    ├── job_grid.py   the jobs side by side: inputs + results
     └── format.py     money formatting
 ```
+
+The take-home tab is a grid, not a pair of panels: every row is one field or
+one figure, the label sits once in a left-hand column, and each job gets a
+column. Both jobs are asked the same questions, so the two answers land side by
+side and are read against each other. A job that can't be calculated — an
+unsupported tax code, say — shows `—` in its column and an error, and leaves
+the other job's column standing.
 
 Two rules keep this honest, and both are worth defending:
 
