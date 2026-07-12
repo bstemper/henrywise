@@ -252,26 +252,6 @@ def render_breakdown(jobs: list[Job], results: list[TakeHomeResults | None]) -> 
     st.dataframe(pd.DataFrame(table), hide_index=True, width="stretch")
 
 
-def render_split(jobs: list[Job], results: list[TakeHomeResults | None]) -> None:
-    """Where the gross comp goes — these three sum to total comp, per job."""
-    split = {
-        job.title: [r.take_home, r.total_tax, r.reliefs]
-        for job, r in zip(jobs, results)
-        if r
-    }
-    if not split:
-        return
-
-    section(
-        "Where your salary goes",
-        "Take-home, income tax and pension — together, the whole package.",
-    )
-    chart_data = pd.DataFrame(split, index=["Take-home", "Income tax", "Pension"])
-    # Drop a row only when no job has anything in it — e.g. neither pays into a
-    # pension. Grouped bars, not stacked: the jobs are alternatives, not parts.
-    st.bar_chart(chart_data[chart_data.sum(axis=1) > 0], horizontal=True, stack=False)
-
-
 def render_tab(jobs: list[Job]) -> None:
     """Render the take-home tab end to end: inputs, calculation, results."""
     inputs = collect_inputs(jobs)
@@ -279,4 +259,3 @@ def render_tab(jobs: list[Job]) -> None:
 
     render_take_home(jobs, results)
     render_breakdown(jobs, results)
-    render_split(jobs, results)
