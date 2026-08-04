@@ -51,7 +51,11 @@ Two rules keep this honest, and both are worth defending:
 ## Scope
 
 Estimate only, not financial advice. Covers income tax (including the £100k
-personal-allowance taper), salary-sacrifice pension, and multiple bonuses each
-landing in their own month. Rest of UK only.
+personal-allowance taper), Class 1 employee National Insurance, salary-sacrifice
+pension, and multiple bonuses each landing in their own month. Rest of UK only.
 
-Not yet covered: National Insurance, student loans, Scottish/Welsh rates.
+NI is charged on the year's earnings after sacrifice. Real NI is worked out per
+pay period, so a lumpy bonus month is charged slightly differently in practice;
+over a full year on a steady salary the two agree.
+
+Not yet covered: student loans, Scottish/Welsh rates.

@@ -28,6 +28,6 @@ with tab_pension:
 
 st.caption(
     f"Estimate only — tax year {rates.LABEL}. Income tax (incl. the £100k allowance "
-    "taper) on PAYE earnings for the rest of the UK. Excludes National Insurance, "
-    "student loans, and Scottish/Welsh rates."
+    "taper) and Class 1 employee National Insurance, on PAYE earnings for the rest "
+    "of the UK. Excludes student loans and Scottish/Welsh rates."
 )

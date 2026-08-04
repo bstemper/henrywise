@@ -4,11 +4,13 @@ from henrywise.tax.models import MONTHS_PER_YEAR, TakeHomeResults, TaxBands, Tax
 
 
 class TestTaxBands:
-    def test_from_thresholds_converts_cumulative_thresholds_to_band_widths(self):
+    def test_from_thresholds_keeps_basic_width_and_additional_threshold(self):
         bands = TaxBands.from_thresholds(12_570, 50_270, 125_140)
         assert bands.personal == 12_570
         assert bands.basic_band == 37_700
-        assert bands.higher_band == 74_870
+        # The additional-rate threshold is stored whole, not as a band width:
+        # it's a fixed point of total income the tapering allowance moves under.
+        assert bands.additional_threshold == 125_140
 
     @pytest.mark.parametrize(
         ("personal", "basic", "higher"),
@@ -23,7 +25,24 @@ class TestTaxBands:
 
     def test_negative_band_is_rejected(self):
         with pytest.raises(ValueError, match="basic_band >= 0"):
-            TaxBands(12_570, -1, 74_870)
+            TaxBands(12_570, -1, 125_140)
+
+    def test_the_higher_band_widens_as_the_allowance_tapers(self):
+        bands = TaxBands.from_thresholds(12_570, 50_270, 125_140)
+        # £150k of taxable income, split with a full allowance vs none. Losing
+        # the £12,570 allowance keeps that much out of the 45% band: the higher
+        # band absorbs it instead, so less lands in additional.
+        _, _, add_full = bands.split(150_000, allowance=12_570)
+        _, _, add_none = bands.split(150_000, allowance=0)
+        assert add_full - add_none == pytest.approx(12_570)
+
+    def test_an_outsize_allowance_never_makes_the_higher_band_negative(self):
+        bands = TaxBands.from_thresholds(12_570, 50_270, 125_140)
+        # A tax code granting more allowance than the whole higher band: the
+        # additional rate can't start below the basic band, so higher is empty.
+        in_basic, in_higher, in_additional = bands.split(200_000, allowance=120_000)
+        assert in_higher == 0
+        assert in_basic + in_additional == 200_000
 
 
 class TestTaxRate:

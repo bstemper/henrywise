@@ -1,14 +1,26 @@
 import pytest
 
 from henrywise.tax import rates
-from henrywise.tax.take_home import calculate_take_home, effective_personal_allowance
+from henrywise.tax.take_home import (
+    calculate_take_home,
+    effective_personal_allowance,
+    national_insurance,
+)
 
 BANDS = rates.BANDS  # personal 12,570 · basic width 37,700 · higher width 74,870
 RATES = rates.RATES  # 20% / 40% / 45%
+NI_BANDS = rates.NI_BANDS  # PT 12,570 · main band width 37,700 (up to the UEL)
+NI_RATES = rates.NI_RATES  # 8% to the UEL, 2% above it
 
 
 def take_home(base, bonuses=(), reliefs=0, tax_code=None):
-    return calculate_take_home(base, bonuses, BANDS, RATES, reliefs, tax_code)
+    return calculate_take_home(
+        base, bonuses, BANDS, RATES, NI_BANDS, NI_RATES, reliefs, tax_code
+    )
+
+
+def ni(earnings):
+    return national_insurance(earnings, NI_BANDS, NI_RATES)
 
 
 class TestPersonalAllowanceTaper:
@@ -68,11 +80,24 @@ class TestBandBoundaries:
 
     def test_additional_rate_with_a_fully_tapered_allowance(self):
         r = take_home(200_000)
-        # Allowance is tapered to nothing, so all £200k is taxable.
+        # Allowance is tapered to nothing, so all £200k is taxable. With no
+        # allowance the higher band runs its full length to the £125,140
+        # additional-rate threshold — not a fixed £74,870 width, which would
+        # start the 45% band £12,570 early.
         assert r.taxable_income == 200_000
         assert r.basic_tax == pytest.approx(37_700 * 0.20)
-        assert r.higher_tax == pytest.approx(74_870 * 0.40)
-        assert r.additional_tax == pytest.approx((200_000 - 37_700 - 74_870) * 0.45)
+        assert r.higher_tax == pytest.approx((125_140 - 37_700) * 0.40)
+        assert r.additional_tax == pytest.approx((200_000 - 125_140) * 0.45)
+
+    def test_matches_a_reference_calculator_past_the_taper(self):
+        # Cross-checked against listentotaxman.com (2026/27): £150k, no pension.
+        # Guards the taper/additional-rate interaction — the old fixed-width
+        # higher band overtaxed here by £628.50 a year (£12,570 of the lost
+        # allowance charged at 45% instead of 40%).
+        r = take_home(150_000)
+        assert r.total_tax == pytest.approx(53_703)
+        assert r.national_insurance == pytest.approx(5_010.60)
+        assert r.take_home == pytest.approx(150_000 - 53_703 - 5_010.60)
 
     def test_zero_income_is_handled(self):
         r = take_home(0)
@@ -107,13 +132,58 @@ class TestReliefs:
     def test_pension_comes_out_of_take_home_as_well_as_tax(self):
         r = take_home(60_000, reliefs=6_000)
         # Take-home is spendable cash: the pension has left the pay packet.
-        assert r.take_home == pytest.approx(60_000 - r.total_tax - 6_000)
+        assert r.take_home == pytest.approx(
+            60_000 - r.total_tax - r.national_insurance - 6_000
+        )
 
     def test_relief_can_restore_a_tapered_allowance(self):
         # £110k with a £10k sacrifice drops adjusted net income back to £100k,
         # recovering the full allowance.
         r = take_home(110_000, reliefs=10_000)
         assert r.taxable_income == 110_000 - 12_570 - 10_000
+
+
+class TestNationalInsurance:
+    @pytest.mark.parametrize(
+        ("earnings", "expected"),
+        [
+            (10_000, 0),  # below the primary threshold — no NI at all
+            (12_570, 0),  # exactly at the threshold
+            (50_270, 37_700 * 0.08),  # the whole main band, at the UEL
+            (100_000, 37_700 * 0.08 + 49_730 * 0.02),  # and 2% above it
+        ],
+    )
+    def test_ni_is_charged_at_eight_percent_then_two(self, earnings, expected):
+        assert ni(earnings) == pytest.approx(expected)
+
+    def test_the_rate_falls_above_the_upper_limit_unlike_income_tax(self):
+        # The quirk worth guarding: an extra £1,000 costs more NI at £40k than
+        # at £100k. Income tax works the other way.
+        assert ni(41_000) - ni(40_000) > ni(101_000) - ni(100_000)
+
+    def test_ni_ignores_the_tax_code(self):
+        # NI has its own threshold. A tax code that hands over the allowance
+        # changes income tax and nothing else.
+        assert take_home(60_000, tax_code="1257L").national_insurance == pytest.approx(
+            take_home(60_000, tax_code="0T").national_insurance
+        )
+
+    def test_salary_sacrifice_saves_ni_as_well_as_tax(self):
+        # Sacrificed pay never became earnings, so it's outside NI too — the
+        # reason salary sacrifice beats a personal pension contribution.
+        without = take_home(60_000)
+        sacrificed = take_home(60_000, reliefs=10_000)
+        assert sacrificed.national_insurance == pytest.approx(ni(50_000))
+        assert sacrificed.national_insurance < without.national_insurance
+
+    def test_ni_comes_out_of_take_home(self):
+        r = take_home(125_000, [50_000], reliefs=6_250)
+        # The default package: NI is the £5.4k the calculator used to hand back.
+        assert r.national_insurance == pytest.approx(ni(168_750))
+        assert r.national_insurance == pytest.approx(5_385.60)
+        assert r.take_home == pytest.approx(
+            175_000 - r.total_tax - r.national_insurance - 6_250
+        )
 
 
 class TestTaxCode:

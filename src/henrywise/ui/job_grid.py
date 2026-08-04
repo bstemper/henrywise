@@ -167,6 +167,8 @@ def calculate(jobs: list[Job], inputs: list[JobInputs]) -> list[TakeHomeResults 
                     job_inputs.bonuses,
                     rates.BANDS,
                     rates.RATES,
+                    rates.NI_BANDS,
+                    rates.NI_RATES,
                     reliefs=job_inputs.pension,
                     tax_code=job_inputs.tax_code,
                 )
@@ -211,8 +213,8 @@ def render_take_home(jobs: list[Job], results: list[TakeHomeResults | None]) -> 
     """The headline figures: one row per period, one column per job."""
     section(
         "Take-home pay",
-        "What actually reaches your account, after income tax and pension. Each "
-        "bonus lands whole, in a single month.",
+        "What actually reaches your account, after income tax, National Insurance "
+        "and pension. Each bonus lands whole, in a single month.",
     )
     header_row(jobs)
 
@@ -230,6 +232,7 @@ BREAKDOWN: list[tuple[str, Callable[[TakeHomeResults], str]]] = [
     ("Taxable income", lambda r: money(r.taxable_income)),
     ("Personal allowance", lambda r: money(r.personal_allowance)),
     ("Income tax", lambda r: money(r.total_tax)),
+    ("National Insurance", lambda r: money(r.national_insurance)),
     ("Take rate", lambda r: percent(r.keep_rate)),
 ]
 
@@ -239,7 +242,7 @@ def render_breakdown(jobs: list[Job], results: list[TakeHomeResults | None]) -> 
     section(
         "The breakdown",
         "Annual. The personal allowance tapers away above £100k; the take rate "
-        "is the share of every gross pound you keep.",
+        "is the share of every gross pound you keep, after tax and NI.",
     )
 
     table = []

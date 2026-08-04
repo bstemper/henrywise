@@ -56,6 +56,8 @@ def default_result():
         [50_000, 0],  # the default bonuses
         rates.BANDS,
         rates.RATES,
+        rates.NI_BANDS,
+        rates.NI_RATES,
         reliefs=6_250,  # the default 5% pension on base
         tax_code="",
     )
@@ -82,6 +84,7 @@ def test_the_breakdown_is_annual_only(app):
         "Taxable income",
         "Personal allowance",
         "Income tax",
+        "National Insurance",
         "Take rate",
     ]
 
@@ -94,6 +97,7 @@ def test_the_breakdown_reports_the_tapered_allowance_and_the_take_rate(
     assert job1["Personal allowance"] == "£0"
     assert job1["Take rate"] == percent(default_result.keep_rate)
     assert job1["Income tax"] == money(default_result.total_tax)
+    assert job1["National Insurance"] == money(default_result.national_insurance)
 
 
 def test_an_unsupported_tax_code_shows_an_error_rather_than_crashing(app):
