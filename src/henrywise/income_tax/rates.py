@@ -8,7 +8,7 @@ Figures are for the 2026/27 UK tax year, rest of UK (England, Wales, NI).
 
 from __future__ import annotations
 
-from henrywise.tax.models import NIBands, NIRate, TaxBands, TaxRate
+from henrywise.income_tax.models import NIBands, NIRate, TaxBands, TaxRate
 
 LABEL = "2026/27"
 

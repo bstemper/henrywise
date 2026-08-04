@@ -4,12 +4,18 @@ from __future__ import annotations
 
 from collections.abc import Sequence
 
-from henrywise.tax.models import NIBands, NIRate, TakeHomeResults, TaxBands, TaxRate
-from henrywise.tax.rates import (
+from henrywise.income_tax.models import (
+    NIBands,
+    NIRate,
+    TakeHomeResults,
+    TaxBands,
+    TaxRate,
+)
+from henrywise.income_tax.rates import (
     PERSONAL_ALLOWANCE_TAPER_DIVISOR,
     PERSONAL_ALLOWANCE_TAPER_START,
 )
-from henrywise.tax.tax_code import parse_raw_string
+from henrywise.income_tax.tax_code import parse_raw_string
 
 
 def effective_personal_allowance(
