@@ -100,7 +100,14 @@ def test_the_breakdown_reports_the_tapered_allowance_and_the_take_rate(
     assert job1["National Insurance"] == money(default_result.national_insurance)
 
 
-def test_an_unsupported_tax_code_shows_an_error_rather_than_crashing(app):
-    app.text_input[0].set_value("S1257L").run()
+@pytest.mark.parametrize("code", ["S1257L", "1257L M1"])
+def test_an_unsupported_tax_code_shows_an_error_rather_than_crashing(app, code):
+    app.text_input[0].set_value(code).run()
     assert not app.exception
     assert "Couldn't calculate take-home" in app.error[0].value
+
+
+def test_the_tax_code_help_names_the_unsupported_kinds(app):
+    help_text = app.text_input[0].help
+    for kind in ("S/C", "K", "W1/M1/X"):
+        assert kind in help_text

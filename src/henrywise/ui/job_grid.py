@@ -138,8 +138,8 @@ def collect_inputs(jobs: list[Job]) -> list[JobInputs]:
         "tax_code",
         jobs,
         help_text="Leave blank and we'll apply the standard allowance, tapered away "
-        "above £100k. Enter a code to use it as-is. Scottish/Welsh (S/C) and "
-        "K codes aren't supported.",
+        "above £100k. Enter a code to use it as-is. Scottish/Welsh (S/C), K, and "
+        "emergency (W1/M1/X) codes aren't supported.",
         value="",
         placeholder="Worked out for you",
     )

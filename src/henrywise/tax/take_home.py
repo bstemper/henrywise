@@ -4,12 +4,12 @@ from __future__ import annotations
 
 from collections.abc import Sequence
 
-from henrywise.tax.codes import parse_tax_code
 from henrywise.tax.models import NIBands, NIRate, TakeHomeResults, TaxBands, TaxRate
 from henrywise.tax.rates import (
     PERSONAL_ALLOWANCE_TAPER_DIVISOR,
     PERSONAL_ALLOWANCE_TAPER_START,
 )
+from henrywise.tax.tax_code import parse_raw_string
 
 
 def effective_personal_allowance(
@@ -61,7 +61,7 @@ def calculate_take_home(
     if not tax_code or not tax_code.strip():  # None/blank UI field → standard allowance
         personal = effective_personal_allowance(adjusted_net_income, bands.personal)
     else:
-        personal = parse_tax_code(tax_code)
+        personal = parse_raw_string(tax_code)
 
     taxable_income = max(total_comp - personal - reliefs, 0)
 
